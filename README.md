@@ -1,5 +1,5 @@
 ==================
-#### Mini Uploader 0.1 - A Pure HTML5 Ajax Uploader for PHP
+### Mini Uploader 0.1 - A Pure HTML5 Ajax Uploader for PHP
 ==================
 
 Mini Uploader is a pure simple HTML5 javascript uploader, for uploading multiple files with ajax on the web. 
