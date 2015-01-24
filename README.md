@@ -1,4 +1,3 @@
-==================
 ### Mini Uploader
 ==================
 
@@ -18,7 +17,6 @@ It is based on form data and xmlhttprequest 2.0 ajax upload.
 -   Drag and Drop upload
 -   Image preview 
 -   Events, Callback and APIs
--   Https support
 -   Extendable
 -   Object Oriented code with the fastes Javascript Class code
 
@@ -29,3 +27,7 @@ It is based on form data and xmlhttprequest 2.0 ajax upload.
 -   Internet Explorer 10+
 -   All browser that have full support to HTML 5 Ajax 2.0
 -   Last Android and IOSX mobile browsers
+
+#### Requiments:
+-   jQuery
+-   PHP

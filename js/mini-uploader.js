@@ -1,67 +1,169 @@
+/**
+ * MiniUploader v1.0
+ * http://www.albanx.com/
+ *
+ * Copyright 2014-2015, Alban Xhaferllari
+ *
+ * Date: 28-08-2013
+ */
 
-var MiniUploader = function(opts){
+var MiniUploader = function(dropContainer, opts){
+	
+	//default options values
+	var defaults = {
+		// Chunk split size for the file when uploading
+		chunkSize: 		1024*1024,
 		
-		//default values
-		this.opts = {
-			chunkSize: 		1024*1024,
-			showPreview: 	true,
-			autoStart: 		false,
-			async:			true,
-			dropContainer: 'body',
-			urlUpload: 		'',
-			dropClass: 		'',
-			dropLayer:		'<div class="drop-files-area1"><h4 class="drop-files-area2">Drop Files Here</h4></div>',
-			hasFileClass:	'',
-			buttonRemove:	'<a href="">X</a>',
-			buttonUpload:	'<a href="">I</a>',
-			buttonSelect:	'<a href="">S</a>',
-			addButtons:		true,
-			fileAddMode:	'linear',
-			fileReplaceMode:'replace',
-			parallelUploads: 3,
-			data: 			null //default data function, get data from container data
-		};
+		// Show image/jpg preview
+		showPreview: 	true,
 		
-		$.extend(this.opts, opts);//FIXME add deep?
+		// Automatic start uploader on drop or select
+		autoStart: 		false,
 		
-		//variabile di ambiente
-		this.fileList		= {};
-		this.dropAreas 		= [];
-		this.fileIndex		= 0;
-		this.useFormData 	= false;
-		this.hasAjaxUpload 	= false;
-		this.freeSlots 		= this.opts.parallelUploads;
-		this.checkInterval 	= null;
-		//costants
-		this.IDLE 		= 0;
-		this.UPLOADING 	= 1;
-		this.DONE 		= 2;
-		this.ERROR 		= 3;
+		// Ajax Request type
+		async:			true,
 		
-		this.init();
+		// Server side uploader URL
+		urlUpload: 		'',
+		
+		// Class to add on drop/drag over the container
+		dropClass: 		'',
+		
+		// Layer to view on drop over file FIXME rename
+		dropLayer:		'<div class="mu-drop-area"><h4 class="mu-drop-title">Drop Files Here</h4></div>',
+		
+		// Message to translate or set, strings
+		messages: 		{
+			'upload_ready' 	: 'Ready',
+			'upload_done'	: 'Done',
+			'upload_error' 	: 'Error',
+			'upload_progress' :'Uploading'
+		},
+		
+		// Class to add when a container has droped a file inside
+		hasFileClass:	'',
+		
+		// Buttons: if dom element it will be added, if selector it will bind remove 
+		// event on that elements
+		buttonRemove:	'<a style="cursor:pointer" title="Remove file"><i class="fa fa-times-circle "></i></a>',
+		buttonUpload:	'<a style="cursor:pointer" title="Start upload this file"><i class="fa fa-arrow-circle-up"></i></a>',
+		buttonSelect:	'<a href="">S</a>',
+		
+		//Progress set up
+		progressBar: 	{
+			//this is the html to show as progress information
+			container: ['<div style="position:absolute;bottom:5px;left:0" class="ax-buttons mu-progress progress progress-striped active">',
+			            	'<div class="bar progress-bar progress-bar-info"></div>',
+			            	'<div class="progress-info">Ready</div>',
+			            '</div>'].join(''),
+			            
+			//this is the function that is triggered on every update, to update the progress bar
+			updater: function(container, progress, fileElem) {
+				container.find('.progress-bar').css('width', progress+'%');
+				if(container.data('.progress-info') != undefined)
+					container.data('.progress-info').html(progress+' %');
+			}
+		},
+		
+		//a selector for a button on the dom where to bind the file select
+		elementTriggerSelect: false,
+		
+		// Use the above buttons on the drop container
+		addButtons:		true,
+		
+		// Use multiple or single file on the same drop container
+		fileAddMode:	'linear', //Will be added one file for container
+		
+		//
+		fileReplaceMode:'replace', //on re-added if there is a file on the container will be overriten
+		
+		// Maximum/Minimun files on the single drop placeholder
+		maxPlaceholderFiles: 1,	//TODO
+		minPlaceholderFiles: 1,	//TODO
+		
+		// Maximum parallel uploads allowed, for performance reason
+		parallelUploads: 3,
+		
+		// Further data to send to server for each file, can be a function or an object
+		// If funtion data will be calculated and should return an object
+		data: 			null, //default data function, get data from container data
+		
+		//Global callback that runs when all files has been uploaded
+		onFinish: function() {
+			
+		},
+		
+		//Callback that runs when a single file has been uploaded, returns fileElem
+		onFinishFile: function(fileElem) {
+			
+		},
+		
+		showPreview: 	true,
+		previewHolder: 'img', //dom element inside droper that will display the preview
+		previewLoading: ''
+	};
+		
+	//Extend the default options with the user one
+	this.opts = $.extend({}, defaults, opts);//FIXME add deep?
+	
+	this.dropContainer 	= dropContainer;
+	
+	//runtime variables
+	this.fileList		= {}; 		//a list with all selected files
+	this.fileIndex		= 0;		//a simple incremental index to track internal file ids of the above list
+	this.useFormData 	= false;	// test variable for formdata support
+	this.hasAjaxUpload 	= false;	// test variable for ajax upload support
+	this.freeSlots 		= this.opts.parallelUploads; //track the free upload slots
+	this.checkInterval 	= null;		//setInterval time for the queue processor
+	this.uploadQueue 	= []; 		//files in queue to ready to be uploaded by the queue processor
+	
+	//internal costants to track file status
+	this.IDLE 		= 0;
+	this.UPLOADING 	= 1;
+	this.DONE 		= 2;
+	this.ERROR 		= 3;
+	this.PREVIEWING	= 4;
+	this.CHECKING	= 5;
+	this.PROCESSING	= 6;
+	
+	//start Uploader Setup
+	this.init();
 };
+
 
 MiniUploader.prototype = {
 	init: function() {
+		
+		//detect AJAX upload
 		this.detectFormData();
 		this.detectHtml5Upload();
 		
 		if(!this.hasAjaxUpload){
-			console.log('Ajax UPload non supported');
+			console.log('Ajax Upload non supported');
+			return false;
 		}
 		
 		if(!this.useFormData ){
 			console.log('Form data not supported');
+			return false;
 		}
 		
-		this.$dropContainer	= $(this.opts.dropContainer);
+		//get the drop containers for the files
+		this.$dropContainer	= $(this.dropContainer);
 		if(!this.$dropContainer) {
 			console.log('No containers found');
+			return false;
 		}
 		
+		//bind Javascript events
 		this.bindEvents();
+		
+		//add drop div for effects
 		this.addOverLayers();
+		return true;
 	},
+	
+	// add a drop layer that will be view when we drag a file over the area
 	addOverLayers: function() {
 		var self = this;
 		if(self.opts.dropLayer) {
@@ -73,212 +175,8 @@ MiniUploader.prototype = {
 			});
 		}
 	},
-	startUpload: function(fileId){
-		var fileElem 	= this.fileList[fileId];
-		fileElem.status = this.UPLOADING;
-		this.ajaxUpload(fileElem);
-	},
-	startUploadAll: function(){
-		if(!this.checkInterval){
-			var self 	= this;
-			
-			this.checkInterval = setInterval(function(){
-				
-				var idles 	= self.getIdleFiles();
-				var len 	= idles.length;
-				if(len == 0) {
-					clearInterval(self.checkInterval);
-					self.checkInterval = null;
-				} else {
-					for(var i = 0; i<len; i++){
-						if( this.freeSlots > 0 ) {
-							self.startUpload(idles[i]);
-							this.freeSlots--;
-						}
-					}
-				}
-				
-			}, 500);
-		}
-	},
-	onFinishFile: function(fileElem) {
-		this.freeSlots++;
-		fileElem.status = this.DONE;
-		if( this.checkFinishStatus() ){
-			this.onFinishAll();
-		}
-		
-	},
-	onErrorFile: function(fileElem, err){
-		this.freeSlots++;
-		fileElem.status = this.ERROR;
-		console.log(err);
-	},
-	onFinishAll: function() {
-
-	},
-	onProgress: function(fileId, progress) {
-		var fileElem = this.fileList[fileId];
-		fileElem.progress = progress;
-		fileElem.domElem.data('progressBar').css('width', progress+'%');
-		fileElem.domElem.data('progressInfo').html(progress+' %');
-		
-	},
-	checkFinishStatus: function(){
-		var done 	= 0;
-		var total 	= 0;
-		
-		for(var fileId in this.fileList) {
-			total++;
-			if ( this.fileList.hasOwnProperty(fileId) ) {
-				var fileElem = this.fileList[fileId];
-				if(fileElem.status == this.DONE) {//FIXME considerare anche l'errore in DONE?
-					done++;
-				}
-			}
-		}
-		
-		return done == total;
-	},
-	getIdleFiles: function(){
-		var idles = []
-		for(var fileId in this.fileList) {
-			if ( this.fileList.hasOwnProperty(fileId) ) {
-				var fileElem = this.fileList[fileId];
-				if(fileElem.status == this.IDLE) {
-					idles.push(fileId);
-				}
-			}
-		}
-		
-		return idles;
-	},
-	getFileId: function(){
-		this.fileIndex++;
-		return 'file_'+this.fileIndex;
-	},
-	getFileParams: function(fileElem){
-		var params = [];
-		if(typeof this.opts.data === 'function') {
-			params = this.opts.data.call(this, fileElem, fileElem.domElem); 
-		} else if(this.opts.data !== null) {
-			params = this.opts.data;
-		}
-		
-		return params;
-	},
-	addFiles: function(fileList, domElem){
-		for(var i = 0; i<fileList.length; i++){
-			this.addFile(fileList[i], domElem);
-			
-			if(this.opts.fileAddMode == 'linear') {
-				var index 		= this.$dropContainer.index(domElem); //TODO cachare il selector
-				var nextElem 	= this.$dropContainer.get(index+1);
-				if (nextElem) {
-					domElem = $(nextElem);
-				}
-			} else if(this.opts.fileAddMode == 'allInOne'){
-				//nothing
-			}
-		}
-	},
-	addFile: function(file, domElem){
-		
-		//create a unique id for the file in queue
-		var fileId = this.getFileId();
-		
-		//file element
-		var fileElem = {
-			file: 			file,
-			name: 			file.name,
-			size: 			file.size,
-			tempName:		file.name,
-			currentByte: 	0,
-			progress: 		0,
-			done:			0,
-			status:			this.IDLE,
-			domElem:		domElem,
-			fileId:			fileId
-		};
-		
-		//calculate file data
-		
-		
-		//the single dom elmenet can have more file attached
-		var fileIds = domElem.data('fileIds');
-		if(!fileIds) {
-			fileIds = [];
-		}
-		
-		//login of file add for a single dom element
-		if(this.opts.fileReplaceMode == 'replace') {
-			for(var i = 0; i<fileIds.length; i++){
-				delete this.fileList[fileIds[i]];
-			}
-			fileIds = [];
-		}
-		fileIds.push(fileId);
-		domElem.data('fileIds', fileIds);
-		
-		//enqueue the file
-		this.fileList[fileId] = fileElem;
-		
-		if(this.opts.addButtons) {
-			this.addButtons(domElem);
-		}
-		return fileId;
-	},
-	removeFile: function(fileId){
-		var fileElem = this.fileList[fileId];
-		fileElem.file = null;
-		fileElem.domElem.find('.ax-buttons').remove();
-		if( fileElem.domElem.data('dropLayer') ) {
-			fileElem.domElem.data('dropLayer').remove();
-			fileElem.domElem.data('dropLayer', null);
-		}
-		delete this.fileList[fileId];
-		fileElem = null;
-	},
-	addButtons: function(domElem){
-		if( !domElem.data('hasButtons') ) {
-			if(this.opts.buttonUpload) {
-				$(this.opts.buttonUpload).addClass('ax-buttons').appendTo(domElem).on('click', {domElem:domElem, self:this} , function(e){
-		    		e.stopPropagation();
-		    		e.preventDefault();
-					var domElem = e.data.domElem;
-					var fileIds = domElem.data('fileIds');
-					var len 	= fileIds.length;
-					for(var i = 0; i<len; i++) {
-						var fileId = fileIds[i];
-						e.data.self.startUpload(fileId);//FIXME qui rischia di non rispettare le quote
-					}
-				});
-			}
-			
-			if(this.opts.buttonRemove) {
-				$(this.opts.buttonRemove).addClass('ax-buttons').appendTo(domElem).on('click', {domElem:domElem, self:this} , function(e){
-		    		e.stopPropagation();
-		    		e.preventDefault();
-					var domElem = e.data.domElem;
-					var fileIds = domElem.data('fileIds');
-					var len 	= fileIds.length;
-					for(var i = 0; i<len; i++) {
-						var fileId = fileIds[i];
-						e.data.self.removeFile(fileId);
-					}
-				});
-			}
-			
-			//TODO parametrizzare progress bar
-			var divBar 		= $('<div />').addClass('ax-buttons progress progress-striped active').appendTo(domElem);
-			var divStrip 	= $('<div />').addClass('bar progress-bar progress-bar-info').appendTo(divBar);
-			var divInfo 	= $('<div />').css({position:'absolute', left:'40%'}).appendTo(divBar);
-			domElem.data({ 'hasButtons': true, 'progressBar':divStrip, 'progressInfo':divInfo });
-			
-			//TODO add browse
-		}
-	},
 	
+	// bind the events
 	bindEvents: function(){
     	var self = this;
 
@@ -286,8 +184,12 @@ MiniUploader.prototype = {
     	this.$dropContainer.on('dragover', function(e){
     		e.stopPropagation();
     		e.preventDefault();
+    		e.dropEffect = 'copy';
     		var $this = $(this);
-    		if(self.opts.dropClass) $this.addClass(self.opts.dropClass);
+    		if(self.opts.dropClass) {
+    			$this.addClass(self.opts.dropClass);
+    		}
+    		
     		if(self.opts.dropLayer) {
     			$this.data('dropLayer').show();
     		}
@@ -310,7 +212,9 @@ MiniUploader.prototype = {
 	    	//add files
 	    	self.addFiles(e.originalEvent.dataTransfer.files, $(this) );
 
-	    	if(self.opts.dropClass) $this.removeClass(self.opts.dropClass);
+	    	if(self.opts.dropClass) {
+	    		$this.removeClass(self.opts.dropClass);
+	    	}
     		if(self.opts.dropLayer) {
     			$(this).data('dropLayer').hide();
     		}
@@ -319,6 +223,291 @@ MiniUploader.prototype = {
     	//bind click events on buttons
 	},
 
+	
+	// Put files in queue, that will be processed for upload
+	enqueueFile: function(fileId){
+		this.uploadQueue.push(fileId);
+		this.processQueue();//trigger a process queue if it is not running already
+	},
+	
+	//Enqueue all files ready for upload
+	enqueueAll: function(){
+		for(var fileId in this.fileList) {
+			if ( this.fileList.hasOwnProperty(fileId) ) {
+				var fileElem = this.fileList[fileId];
+				if(fileElem.status == this.IDLE) {
+					this.uploadQueue.push(fileId);
+				}
+			}
+		}
+		
+		this.processQueue();//trigger a process queue if it is not running already
+	},
+	
+	// Get files from queue and start upload them by respecting quotas
+	processQueue: function() {
+		var self 	= this;
+		if(!this.checkInterval){
+			this.checkInterval = setInterval(function(){
+				if(self.uploadQueue.length == 0) {
+					clearInterval(self.checkInterval);
+					self.checkInterval = null;
+				} else {
+					for(var i = 0; i<self.uploadQueue.length; i++){
+						if( self.freeSlots > 0 ) {
+							self.startUpload( self.uploadQueue[i] );//start file upload
+							self.uploadQueue.splice(i, 1); //remove from queue
+							self.freeSlots--;
+						}
+					}
+				}
+				
+			}, 200);
+		}
+	},
+	startUpload: function(fileId){
+		//start uploading the file
+		var fileElem 	= this.fileList[fileId];
+		fileElem.status = this.UPLOADING;//set correct status
+		this.ajaxUpload(fileElem);//start the ajax upload
+	},
+	onFinishFile: function(fileElem) {
+		this.freeSlots++;//free the slot
+		fileElem.status = this.DONE;// set the correct status
+		
+		//if an even is configured by the user run it
+		if(typeof this.opts.onFinishFile == 'function') {
+			this.opts.onFinishFile.call(this, fileElem);
+		}
+		
+		//check of all files has been uploaded, if yes run  global finish event
+		if( this.checkFinishStatus() ){
+			this.onFinishAll();
+		}
+	},
+	
+	//track error uploads
+	onErrorFile: function(fileElem, err){
+		this.freeSlots++;
+		fileElem.status = this.ERROR;
+		console.log(err);
+	},
+	
+	
+	onProgress: function(fileId, progress) {
+		var fileElem = this.fileList[fileId];
+		fileElem.progress = progress;
+		
+		//update the progress bar if it configured
+		if(this.opts.progressBar) {
+			if(typeof this.opts.progressBar.updater == 'function') {
+				var progressBar = fileElem.domElem.data('progressBar');
+				this.opts.progressBar.updater.call(this, progressBar, progress, fileElem);
+			}
+		}
+	},
+	
+	//run final finish
+	onFinishAll: function() {
+		console.log('All files has been uploaded');
+		if(typeof this.opts.onFinish == 'function') {
+			this.opts.onFinish.call(this);
+		}
+	},
+	
+	//function that checks the list of file if has been uploaded
+	checkFinishStatus: function(){
+		var done 	= 0;
+		var total 	= 0;
+		
+		//loop the object list
+		for(var fileId in this.fileList) {
+			total++;
+			if ( this.fileList.hasOwnProperty(fileId) ) {//maybe not needed
+				var fileElem = this.fileList[fileId];
+				if(fileElem.status == this.DONE) {//FIXME consider files gone in error
+					done++;
+				}
+			}
+		}
+		
+		return done == total;
+	},
+
+	//generate a simple index id for tracking file list
+	generateFileId: function(){
+		this.fileIndex++;
+		return 'file_'+this.fileIndex;
+	},
+	
+	//calculate params to send with the single file upload, maybe needed on server side
+	getFileParams: function(fileElem){
+		var params = [];
+		if(typeof this.opts.data === 'function') {
+			params = this.opts.data.call(this, fileElem, fileElem.domElem); 
+		} else if(this.opts.data !== null) {
+			params = this.opts.data;
+		}
+		
+		return params;
+	},
+	
+	//add a list of files on the list
+	addFiles: function(fileList, domElem){
+		for(var i = 0; i<fileList.length; i++){
+			this.addFile(fileList[i], domElem);
+			
+			if(this.opts.fileAddMode == 'linear') {
+				var index 		= this.$dropContainer.index(domElem); //TODO cachare il selector
+				var nextElem 	= this.$dropContainer.get(index+1);
+				if (nextElem) {
+					domElem = $(nextElem);
+				}
+			} else if(this.opts.fileAddMode == 'allInOne'){
+				//nothing TODO add more files on the same first container
+			}
+		}
+	},
+	addFile: function(file, domElem){
+		
+		//create a unique id for the file in queue
+		var fileId = this.generateFileId();
+		
+		//file element
+		var fileElem = {
+			file: 			file,
+			name: 			file.name,
+			size: 			file.size,
+			tempName:		file.name,
+			currentByte: 	0,
+			progress: 		0,
+			done:			0,
+			status:			this.IDLE,
+			domElem:		domElem,
+			fileId:			fileId
+		};
+		
+		//the single dom elmenet can have more file attached
+		var fileIds = domElem.data('fileIds');
+		if( !fileIds ) {
+			fileIds = [];
+		}
+		
+		//of file add for a single dom element
+		if(this.opts.fileReplaceMode == 'replace') {
+			var len = fileIds.length;
+			for(var i = 0; i<len; i++){
+				delete this.fileList[fileIds[i]];
+			}
+			fileIds = [];
+		}
+		fileIds.push(fileId);
+		domElem.data('fileIds', fileIds);
+		
+		//add in list the file
+		this.fileList[fileId] = fileElem;
+		
+		//add buttons for the single element, including progress bar
+		if(this.opts.addButtons) {
+			this.addButtons(domElem);
+		}
+		
+		//create a simple preview of the file
+		if(this.opts.showPreview) {
+			this.addFilePreview(fileId);
+		}
+		
+		return fileId;
+	},
+	
+	// This function create a preview for the file in case of images
+	addFilePreview: function(fileId) {
+		var fileElem= this.fileList[fileId];
+		var file 	= fileElem.file;
+		var domElem = fileElem.domElem;
+		
+		//add a small preview of the image if supported
+		var URL 	= window.URL || window.webkitURL;
+		if (URL.createObjectURL && (file.type == "image/jpeg" || file.type == "image/png" || file.type == "image/gif")) {
+			var holder 	= domElem.find(this.opts.previewHolder);
+			var img 	= $('<img class="mu-preview" />').css({'max-width':holder.width(), 'max-height': holder.height()}).attr('src', URL.createObjectURL(fileElem.file) );
+			if(holder.length) {
+				holder.children().hide();
+				holder.append(img).data('muPreview', img);
+			}
+		}
+	},
+	
+	//remove the file from the list and try to free memory
+	removeFile: function(fileId){
+		var fileElem 	= this.fileList[fileId];
+		fileElem.file 	= null;
+		fileElem 		= null;
+		delete this.fileList[fileId];
+	},
+	
+	//Clean the DOM container of the file
+	removeFilesFromDom: function(domElem) {
+		var fileIds = domElem.data('fileIds');
+		var len 	= fileIds.length;
+		for(var i = 0; i<len; i++) {
+			var fileId = fileIds[i];
+			this.removeFile(fileId);
+		}
+		
+		domElem.find('.ax-buttons').remove();
+		domElem.data('hasButtons', false);
+		
+		//remove the preview image and restore old content
+		var holder 	= domElem.find(this.opts.previewHolder);
+		if( holder.length ) {
+			holder.children().show();
+			holder.data('muPreview').remove();
+		}
+	},
+	addButtons: function(domElem){
+		if( !domElem.data('hasButtons') ) {
+			
+			//add Upload button to the container
+			if(this.opts.buttonUpload) {
+				$(this.opts.buttonUpload).addClass('ax-buttons').appendTo(domElem).on('click', {domElem:domElem, self:this} , function(e){
+		    		e.stopPropagation();
+		    		e.preventDefault();
+		    		
+		    		//get file list for this dom element
+					var domElem = e.data.domElem;
+					var fileIds = domElem.data('fileIds');
+					var len 	= fileIds.length;
+					
+					//upload files
+					for(var i = 0; i<len; i++) {
+						var fileId = fileIds[i];
+						e.data.self.startUpload(fileId);//FIXME qui rischia di non rispettare le quote
+					}
+				});
+			}
+			
+			//add remove button
+			if(this.opts.buttonRemove) {
+				$(this.opts.buttonRemove).addClass('ax-buttons').appendTo(domElem).on('click', {domElem:domElem, self:this} , function(e){
+		    		e.stopPropagation();
+		    		e.preventDefault();
+					e.data.self.removeFilesFromDom(e.data.domElem);
+				});
+			}
+			
+			if(this.opts.progressBar) {
+				var progressBar = $(this.opts.progressBar.container).appendTo(domElem);
+				domElem.data('progressBar', progressBar); 
+			}
+
+			domElem.data('hasButtons', true);
+			
+			//TODO add browse
+		}
+	},
+
+	//This is the core of the uploading, a semi- recrusive function for uploading the file via ajax
 	ajaxUpload: function(fileElem){
     	var currentByte	= fileElem.currentByte;
     	var name		= fileElem.name;
@@ -333,18 +522,15 @@ MiniUploader.prototype = {
     	var xhr 		= new XMLHttpRequest();//prepare xhr for upload
     	var self 		= this;
     	
-    	if(chunkSize == 0)//no divide
-    	{
+    	if(chunkSize == 0) {
     		chunk	= file;
     		isLast	= true;
-    	}
-    	else
-    	{
+    	} else {
     		chunk = this.fileSlice(file, currentByte, endByte);
     	}
-
-    	if(chunk === null)//no slice, it is not supported if null
-    	{
+    	
+    	//no slice, it is not supported if null
+    	if(chunk === null) {
     		chunk	= file;
     		isLast	= true;
     	}
@@ -394,11 +580,14 @@ MiniUploader.prototype = {
 			}
 		};
 
+		//internal uploader params, not change
 		var params = [];
 		params.push('ax-start-byte='+ currentByte);
 		params.push('ax-last-chunk='+ isLast);
 		params.push('ax-file-name=' + name);
 		params.push('ax-temp-name=' + tempName);
+		
+		//additional user params
 		var fileParams = this.getFileParams(fileElem);
 		for(var key in fileParams){
 			if ( fileParams.hasOwnProperty(key) ) {
@@ -406,8 +595,7 @@ MiniUploader.prototype = {
 			}
 		}
 		
-		if(this.useFormData) //firefox 5 formdata does not work correctly
-		{
+		if(this.useFormData) { //firefox 5 formdata does not work correctly
 			var data 	= new FormData();
 			var len 	= params.length;
 			data.append('ax_file_input', chunk);
@@ -418,9 +606,9 @@ MiniUploader.prototype = {
 			}
 			xhr.open('POST', this.opts.urlUpload, this.opts.async);
 			xhr.send(data);
-		}
-		else//else we use a old trick upload with php::/input ajax, FF3.6+, Chrome, Safari
-		{
+			
+		} else {
+			//else we use a old trick upload with php::/input ajax, FF3.6+, Chrome, Safari
 			var c =  this.opts.urlUpload.indexOf('?') == -1 ? '?' : '&';
 			xhr.open('POST', this.opts.urlUpload + c + params.join('&'), this.opts.async);
 			xhr.setRequestHeader('Cache-Control', 'no-cache');
@@ -480,5 +668,14 @@ MiniUploader.prototype = {
 		}
 		
 		return null;
-	},
-});
+	}
+};
+//TODO add destroy method
+
+(function($, MiniUploader) {
+	$.fn.miniuploader = function(opts) {
+		this.data('miniuploader', new MiniUploader(this, opts) );
+		
+		return this;
+	};
+})(jQuery, MiniUploader);
