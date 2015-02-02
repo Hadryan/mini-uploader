@@ -26,11 +26,14 @@ var MiniUploader = function(dropContainer, opts){
 		// Server side uploader URL
 		urlUpload: 		'',
 		
+		// Remote Upload path, better set in the server side
+		uploadPath: '',
+		
 		// Class to add on drop/drag over the container
 		dropClass: 		'',
 		
 		// Layer to view on drop over file FIXME rename
-		dropLayer:		'<div class="mu-drop-area"><h4 class="mu-drop-title">Drop Files Here</h4></div>',
+		dropLayer:		'<div class="mu-drop-area"><span class="mu-drop-title">Drop Files Here</span></div>',
 		
 		// Message to translate or set, strings
 		messages: 		{
@@ -45,25 +48,25 @@ var MiniUploader = function(dropContainer, opts){
 		
 		// Buttons: if dom element it will be added, if selector it will bind remove 
 		// event on that elements
-		buttonRemove:	'<a style="cursor:pointer" title="Remove file"><i class="fa fa-times-circle "></i></a>',
-		buttonUpload:	'<a style="cursor:pointer" title="Start upload this file"><i class="fa fa-arrow-circle-up"></i></a>',
-		buttonSelect:	'<a href="">S</a>',
-		
+		buttonRemove:	'<a class="mu-bremove" title="Remove file"><i class="fa fa-times-circle"></i></a>',
+		buttonUpload:	'<a class="mu-bstart" title="Start upload this file"><i class="fa fa-arrow-circle-up"></i></a>',
+		buttonSelect:	'<a class="mu-bselect">Select file</a>',
+		filenameContainer:	'<span class="mu-fname"></span>',
+		fileCountContainer: '<span class="mu-fcount"></span>',
 		//Progress set up
 		progressBar: 	{
 			//this is the html to show as progress information
-			container: ['<div style="position:absolute;bottom:5px;left:0" class="ax-buttons mu-progress progress progress-striped active">',
-			            	'<div class="bar progress-bar progress-bar-info"></div>',
-			            	'<div class="progress-info">Ready</div>',
-			            '</div>'].join(''),
+			container: '<div class="mu-progress">0%</div>',
 			            
 			//this is the function that is triggered on every update, to update the progress bar
 			updater: function(container, progress, fileElem) {
-				container.find('.progress-bar').css('width', progress+'%');
-				if(container.data('.progress-info') != undefined)
-					container.data('.progress-info').html(progress+' %');
+				container.html(progress+' %');
 			}
 		},
+		showPreview: 	true,
+		previewHolder: '.mu-preview-holder', //dom element inside droper that will display the preview
+		previewLoading: '',
+		
 		
 		//a selector for a button on the dom where to bind the file select
 		elementTriggerSelect: false,
@@ -72,10 +75,7 @@ var MiniUploader = function(dropContainer, opts){
 		addButtons:		true,
 		
 		// Use multiple or single file on the same drop container
-		fileAddMode:	'linear', //Will be added one file for container
-		
-		//
-		fileReplaceMode:'replace', //on re-added if there is a file on the container will be overriten
+		fileAddMode:	'replace', //Will be added one file for container replace/clone
 		
 		// Maximum/Minimun files on the single drop placeholder
 		maxPlaceholderFiles: 1,	//TODO
@@ -88,24 +88,43 @@ var MiniUploader = function(dropContainer, opts){
 		// If funtion data will be calculated and should return an object
 		data: 			null, //default data function, get data from container data
 		
+		//validate selected files: runs for each selected files, if return true file will be added to the list
+		validateFile: function(file){
+			return true;
+		},
+		
 		//Global callback that runs when all files has been uploaded
 		onFinish: function() {
 			
 		},
 		
+		//Callback that runs when all files of a single container has been uploaded
+		onFinishGroup: function(domElem){
+			
+		},
 		//Callback that runs when a single file has been uploaded, returns fileElem
 		onFinishFile: function(fileElem) {
 			
 		},
 		
-		showPreview: 	true,
-		previewHolder: 'img', //dom element inside droper that will display the preview
-		previewLoading: ''
+		//Callabcks that runs when files are dropped
+		onDrop: function(files) {
+			
+		},
+		
+		//Callbacks that runs when files are select or droped
+		onFileSelect: function(){
+			
+		},
+		onPaste: function(files){
+			
+		}
 	};
 		
 	//Extend the default options with the user one
 	this.opts = $.extend({}, defaults, opts);//FIXME add deep?
 	
+	//Drop container
 	this.dropContainer 	= dropContainer;
 	
 	//runtime variables
@@ -116,6 +135,7 @@ var MiniUploader = function(dropContainer, opts){
 	this.freeSlots 		= this.opts.parallelUploads; //track the free upload slots
 	this.checkInterval 	= null;		//setInterval time for the queue processor
 	this.uploadQueue 	= []; 		//files in queue to ready to be uploaded by the queue processor
+	this.inputSelect 	= null;
 	
 	//internal costants to track file status
 	this.IDLE 		= 0;
@@ -149,7 +169,7 @@ MiniUploader.prototype = {
 		}
 		
 		//get the drop containers for the files
-		this.$dropContainer	= $(this.dropContainer);
+		this.$dropContainer	= $(this.dropContainer).css('position', 'relative');
 		if(!this.$dropContainer) {
 			console.log('No containers found');
 			return false;
@@ -160,6 +180,10 @@ MiniUploader.prototype = {
 		
 		//add drop div for effects
 		this.addOverLayers();
+		
+		//add hidden input for select button
+		this.inputSelect = $('<input type="file" />').css({visibility:'hidden', width:0, height:0, position:absolute, top:0, left:0});
+		this.inputSelect.appendTo('body');
 		return true;
 	},
 	
@@ -279,7 +303,7 @@ MiniUploader.prototype = {
 		if(typeof this.opts.onFinishFile == 'function') {
 			this.opts.onFinishFile.call(this, fileElem);
 		}
-		
+
 		//check of all files has been uploaded, if yes run  global finish event
 		if( this.checkFinishStatus() ){
 			this.onFinishAll();
@@ -357,13 +381,17 @@ MiniUploader.prototype = {
 		for(var i = 0; i<fileList.length; i++){
 			this.addFile(fileList[i], domElem);
 			
-			if(this.opts.fileAddMode == 'linear') {
+			if(this.opts.fileAddMode == 'clone') {
 				var index 		= this.$dropContainer.index(domElem); //TODO cachare il selector
 				var nextElem 	= this.$dropContainer.get(index+1);
 				if (nextElem) {
 					domElem = $(nextElem);
+				} else {
+					var newdomElem = domElem.clone();
+					newdomElem.insertAfter(domElem);
+					domElem = newdomElem;
 				}
-			} else if(this.opts.fileAddMode == 'allInOne'){
+			} else if(this.opts.fileAddMode == 'replace'){
 				//nothing TODO add more files on the same first container
 			}
 		}
@@ -378,7 +406,6 @@ MiniUploader.prototype = {
 			file: 			file,
 			name: 			file.name,
 			size: 			file.size,
-			tempName:		file.name,
 			currentByte: 	0,
 			progress: 		0,
 			done:			0,
@@ -387,29 +414,20 @@ MiniUploader.prototype = {
 			fileId:			fileId
 		};
 		
-		//the single dom elmenet can have more file attached
-		var fileIds = domElem.data('fileIds');
-		if( !fileIds ) {
-			fileIds = [];
-		}
-		
-		//of file add for a single dom element
-		if(this.opts.fileReplaceMode == 'replace') {
-			var len = fileIds.length;
-			for(var i = 0; i<len; i++){
-				delete this.fileList[fileIds[i]];
-			}
-			fileIds = [];
-		}
-		fileIds.push(fileId);
-		domElem.data('fileIds', fileIds);
+		//the single dom elmenet attach 
+		domElem.data('fileIds', fileId);
 		
 		//add in list the file
 		this.fileList[fileId] = fileElem;
 		
 		//add buttons for the single element, including progress bar
 		if(this.opts.addButtons) {
-			this.addButtons(domElem);
+			this.addButtons(domElem, fileElem.name);
+		}
+		
+		//update file counter number
+		if( domElem.data('fileCounter') ) {
+			domElem.data('fileCounter').html(fileIds.length);
 		}
 		
 		//create a simple preview of the file
@@ -426,6 +444,7 @@ MiniUploader.prototype = {
 		var file 	= fileElem.file;
 		var domElem = fileElem.domElem;
 		
+		//TODO preview for multiple file in same container
 		//add a small preview of the image if supported
 		var URL 	= window.URL || window.webkitURL;
 		if (URL.createObjectURL && (file.type == "image/jpeg" || file.type == "image/png" || file.type == "image/gif")) {
@@ -434,6 +453,7 @@ MiniUploader.prototype = {
 			if(holder.length) {
 				holder.children().hide();
 				holder.append(img).data('muPreview', img);
+				img.css({'max-width': holder.width() - parseInt( img.css("border-right-width"), 10) - parseInt( img.css("border-left-width"), 10) });
 			}
 		}
 	},
@@ -448,6 +468,7 @@ MiniUploader.prototype = {
 	
 	//Clean the DOM container of the file
 	removeFilesFromDom: function(domElem) {
+		//get all files in this single container and remove one by one
 		var fileIds = domElem.data('fileIds');
 		var len 	= fileIds.length;
 		for(var i = 0; i<len; i++) {
@@ -455,22 +476,38 @@ MiniUploader.prototype = {
 			this.removeFile(fileId);
 		}
 		
-		domElem.find('.ax-buttons').remove();
+		//clean doom element
+		domElem.find('.mu-buttons').remove();
 		domElem.data('hasButtons', false);
-		
+		domElem.data('fileIds', []);
 		//remove the preview image and restore old content
 		var holder 	= domElem.find(this.opts.previewHolder);
 		if( holder.length ) {
-			holder.children().show();
-			holder.data('muPreview').remove();
+			holder.html('');
+		}
+		
+		//remove file counter
+		if( domElem.data('fileCounter') ){
+			domElem.data('fileCounter').remove();
+		}
+		
+		//remove progress bar
+		if( domElem.data('progressBar') ) {
+			domElem.data('progressBar').remove();
+		}
+		
+		//remove file name container
+		if(domElem.data('filenameContainer') ) {
+			domElem.data('filenameContainer').remove();
 		}
 	},
-	addButtons: function(domElem){
+	
+	addButtons: function(domElem, fileName){
 		if( !domElem.data('hasButtons') ) {
 			
 			//add Upload button to the container
 			if(this.opts.buttonUpload) {
-				$(this.opts.buttonUpload).addClass('ax-buttons').appendTo(domElem).on('click', {domElem:domElem, self:this} , function(e){
+				$(this.opts.buttonUpload).addClass('mu-buttons').appendTo(domElem).on('click', {domElem:domElem, self:this} , function(e){
 		    		e.stopPropagation();
 		    		e.preventDefault();
 		    		
@@ -489,21 +526,42 @@ MiniUploader.prototype = {
 			
 			//add remove button
 			if(this.opts.buttonRemove) {
-				$(this.opts.buttonRemove).addClass('ax-buttons').appendTo(domElem).on('click', {domElem:domElem, self:this} , function(e){
+				$(this.opts.buttonRemove).addClass('mu-buttons').appendTo(domElem).on('click', {domElem:domElem, self:this} , function(e){
 		    		e.stopPropagation();
 		    		e.preventDefault();
 					e.data.self.removeFilesFromDom(e.data.domElem);
 				});
 			}
 			
+			//progress info
 			if(this.opts.progressBar) {
 				var progressBar = $(this.opts.progressBar.container).appendTo(domElem);
 				domElem.data('progressBar', progressBar); 
 			}
 
+			//file counter
+			if(this.opts.fileCountContainer) {
+				var fileCounter = $(this.opts.fileCountContainer).appendTo(domElem);
+				domElem.data('fileCounter', fileCounter.html(1) );
+//				fileCounter.on('click', domElem, function(e){
+//					
+//				});
+			}
+			
+			//show file name
+			if(this.opts.filenameContainer) {
+				var filenameContainer = $(this.opts.filenameContainer).appendTo(domElem);
+				domElem.data('filenameContainer', filenameContainer.html(fileName) );
+			}
 			domElem.data('hasButtons', true);
 			
 			//TODO add browse
+		}
+		
+		//update the title attribute for other file names
+		if( domElem.data('filenameContainer') ) {
+			var fileId = domElem.data('fileId');
+			domElem.data('filenameContainer').attr('title', this.fileList[fileId].name );
 		}
 	},
 
@@ -513,7 +571,6 @@ MiniUploader.prototype = {
     	var name		= fileElem.name;
     	var size		= fileElem.size;
     	var file 		= fileElem.file;
-    	var tempName	= fileElem.tempName;
     	
     	var chunkSize	= this.opts.chunkSize;	//chunk size
 		var endByte		= chunkSize + currentByte;
@@ -562,7 +619,6 @@ MiniUploader.prototype = {
 					var ret	= JSON.parse( this.responseText );
 					if(currentByte == 0) {
 						fileElem.name 		= ret.name;
-						fileElem.tempName 	= ret.temp_name;
 					}
 					
 					if(isLast) {
@@ -585,7 +641,6 @@ MiniUploader.prototype = {
 		params.push('ax-start-byte='+ currentByte);
 		params.push('ax-last-chunk='+ isLast);
 		params.push('ax-file-name=' + name);
-		params.push('ax-temp-name=' + tempName);
 		
 		//additional user params
 		var fileParams = this.getFileParams(fileElem);
@@ -675,7 +730,6 @@ MiniUploader.prototype = {
 (function($, MiniUploader) {
 	$.fn.miniuploader = function(opts) {
 		this.data('miniuploader', new MiniUploader(this, opts) );
-		
 		return this;
 	};
 })(jQuery, MiniUploader);

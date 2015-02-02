@@ -1,0 +1,92 @@
+#drophere{
+    background-color: #333;
+    border-radius: 8px;
+    height:180px;
+    width:150px;
+    text-align: center;
+}
+
+/***Default theme*****************/
+.mu-drop-area{
+    background-color: #333;
+    border-radius: 8px;
+	text-align: center;
+	border:6px dashed blue;
+	position:absolute;
+	width:100%;
+	height:100%;
+	top:0;
+	left:0;
+}
+
+.mu-drop-title {
+    display: table-cell;
+    vertical-align: middle;
+	color:white;
+}
+
+.mu-preview-holder{
+	height:100%;
+    width:100%;
+}
+
+.mu-preview{
+    border:4px solid white;
+	border-radius:5px;	
+}
+
+.mu-buttons{
+    cursor: pointer;
+    font-size: 24px;
+    position: absolute;
+}
+
+.mu-progress, .mu-fcount{
+    background-color: green;
+    border-radius: 14px;
+    color: white;
+    display: block;
+    font-size: 10px;
+    height: 23px;
+    position: absolute;
+    right: 0;
+    top: 56px;
+    width: 23px;
+}
+.mu-fcount{
+	top: 86px;
+}
+
+.mu-fname {
+    background-color: green;
+    border-radius: 4px;
+    bottom: 0;
+    color: white;
+    font-size: 10px;
+    height: 12px;
+    left: 0;
+    line-height: 10px;
+    overflow: hidden;
+    position: absolute;
+    text-align: center;
+    text-overflow: ellipsis;
+    width: 100%;
+}
+
+.mu-bremove{
+    color: green;
+    right: 0;
+    top: 26px;
+}
+
+.mu-bselect{
+    right:0;
+    color:green;
+    top:24px;
+}
+.mu-bstart{
+    right:0;
+	color:green;
+	top:0;
+}
+/********************************/

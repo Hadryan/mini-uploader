@@ -2,7 +2,7 @@
 <html>
 <head>
     <title>MiniUploader - Modern Ajax Uploader</title>
-    <meta name="description" content="An animated CSS activity indicator with VML fallback.">
+    <meta name="description" content="A modern Ajax File Uploader with Drag and Drop">
     <meta name="viewport" content="width=1024, maximum-scale=1">
     <meta property="og:image" content="assets/preview3860.jpg?v=1" />
     <link rel="shortcut icon" href="favicon.ico">
@@ -11,9 +11,14 @@
     <link href="assets/prettify.css" type="text/css" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="assets/fd-slider/fd-slider5e1f.css?v=2">
     <link rel="stylesheet" type="text/css" href="assets/fd-slider/fd-slider-tooltip.css">
+    
+    <link rel="stylesheet" type="text/css" href="../fontawesome/font-awesome.min.css">
+    <link rel="stylesheet" type="text/css" href="../css/themes.css">
+    
     <script type="text/javascript" src="assets/jquery.min.js"></script>
     <script type="text/javascript" src="assets/prettify.js"></script>
     <script type="text/javascript" src="../js/mini-uploader.js"></script>
+    
 </head>
 <body>
 
@@ -38,13 +43,16 @@
 	        <h2>Example</h2>
 	        
 	        <h3>Single Drop</h3>
-	        <div id="drophere"></div>
+	        <p>Drop any fiel in this area:</p>
+	        <div id="drophere">
+	        	<div class="mu-preview-holder"></div>
+	        </div>
 	
 	         <h3>Multi Drop</h3>
 	        <div class="drophere"></div>
 	        
 	        <h3>Events</h3>
-	        <div class="dropvents"></div>
+	        <div class="dropevents"></div>
 	    </div>
 
 	    <h2>Features</h2>
@@ -188,6 +196,8 @@ var defaults = {
 <script type="text/javascript" src="assets/fd-slider/fd-slider.js"></script>
 <script>
   	prettyPrint();
+
+  	$('#drophere').miniuploader();
 </script>
 
 </body>
