@@ -36,14 +36,13 @@
 	    
 		<div id="download">
 		  	<a href="mini-uploader.zip" class="button">Download for free</a>
-		  	<a href="paypal" class="button">Buy a commercial version</a>
 		</div>
 
 		<div id="example">
 	        <h2>Example</h2>
 	        
 	        <h3>Single Drop</h3>
-	        <p>Drop any fiel in this area:</p>
+	        <p>Drop any file in this area:</p>
 	        <div id="drophere">
 	        	<div class="mu-preview-holder"></div>
 	        </div>
@@ -114,17 +113,11 @@ var defaults = {
     //Progress set up
     progressBar:    {
         //this is the html to show as progress information
-        container: ['<div style="position:absolute;bottom:5px;left:0" class="mu-progress progress progress-striped active">',
-                        '<div class="bar progress-bar progress-bar-info"></div>',
-                        '<div class="progress-info">Ready</div>',
-                    '</div>'].join(''),
-                    
-        //this is the function that is triggered on every update, to update the progress bar
-        updater: function(container, progress, fileElem) {
-            container.find('.progress-bar').css('width', progress+'%');
-            if(container.data('.progress-info') != undefined)
-                container.data('.progress-info').html(progress+' %');
-        }
+        container: '<?php echo htmlspecialchars('<div class="mu-progress">0%</div>')?>',
+		//this is the function that is triggered on every update, to update the progress bar
+		updater: function(container, progress, fileElem) {
+			container.html(progress+' %');
+		}
     },
     
     elementTriggerSelect: false,//a selector for a button on the dom where to bind the file select
@@ -183,9 +176,7 @@ var defaults = {
 
 <h2>Contact</h2>
 <p id="contact">
-  <img width="57" height="57" src="../../www.gravatar.com/avatar/f1f2e1842f6ff681a6d1b0a2405d0117.jpeg">
   If you encounter any problems, for updates, please use the <a href="https://github.com/albanx/miniuploader/issues">GitHub issue tracker</a>.<br>
-  For updates <a href="http://twitter.com/fgnass">follow me on Twitter</a>.<br>
 </p>
 </div>
 <div id="footer">
@@ -197,7 +188,9 @@ var defaults = {
 <script>
   	prettyPrint();
 
-  	$('#drophere').miniuploader();
+  	$('#drophere').miniuploader({
+  	  	urlUpload: '../upload.php'
+  	});
 </script>
 
 </body>

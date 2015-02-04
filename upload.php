@@ -70,7 +70,11 @@ class RealAjaxUploader
 	{
 		//set data from JAVASCRIPT
 		if(isset($_REQUEST['ax-max-file-size'])) 	$this->setMaxFileSize($_REQUEST['ax-max-file-size']);
-		if(isset($_REQUEST['ax-file-path']))	 	$this->setUploadPath($_REQUEST['ax-file-path']);
+		if(isset($_REQUEST['ax-file-path'])){
+			$this->setUploadPath($_REQUEST['ax-file-path']);
+		} else {
+			$this->setUploadPath( $this->upload_path);
+		}
 		if(isset($_REQUEST['ax-allow-ext']))		$this->setAllowExt( !empty($_REQUEST['ax-allow-ext']) ? explode('|', $_REQUEST['ax-allow-ext']): array() );
 		if(isset($_REQUEST['ax-override']))			$this->setOverride(true);
 		//set deny
@@ -124,11 +128,9 @@ class RealAjaxUploader
 	private function makeDir($dir)
 	{
 		// Create thumb path if do not exits
-		if(!file_exists($dir) && !empty($dir))
-		{
+		if(!file_exists($dir) && !empty($dir)) {
 			$done = @mkdir($dir, 0777, true);
-			if(!$done)
-			{
+			if(!$done) {
 				$this->message(-1, 'Cannot create upload folder');
 			}
 		}
@@ -327,12 +329,6 @@ class RealAjaxUploader
 	private function finish()
 	{
 		ob_start();
-		//create a thumb if data is set
-		$this->createThumbGD(100);
-
-		//send a notification if is set
-		$this->sendEmail();
-
 		//run the external user success function
 		if($this->finish_function && function_exists( $this->finish_function ))
 		{
@@ -341,7 +337,6 @@ class RealAjaxUploader
 			} catch (Exception $e) {
 				echo $e->getTraceAsString();
 			}
-
 		}
 		$value = ob_get_contents();
 		ob_end_clean();
@@ -410,9 +405,9 @@ class RealAjaxUploader
 
 //======================== Start Upload Process===========================================================\\
 $uploader = new RealAjaxUploader($DENY_EXT);  //create uploader object
-if(isset($MAX_FILES_SIZE) && $MAX_FILES_SIZE) 		$uploader->setMaxFileSize($MAX_FILES_SIZE);
-if(isset($ALLOW_EXTENSIONS) && $ALLOW_EXTENSIONS) 	$uploader->setAllowExt($ALLOW_EXTENSIONS);
-if(isset($UPLOAD_PATH) && $UPLOAD_PATH) 			$uploader->setUploadPath($UPLOAD_PATH);
+if( !empty($MAX_FILES_SIZE) ) 		$uploader->setMaxFileSize($MAX_FILES_SIZE);
+if( !empty($ALLOW_EXTENSIONS) ) 	$uploader->setAllowExt($ALLOW_EXTENSIONS);
+if( !empty($UPLOAD_PATH) ) 			$uploader->setUploadPath($UPLOAD_PATH);
 
 //register a callback function on file complete
 if(isset($FINISH_FUNCTION) && $FINISH_FUNCTION) 	$uploader->onFinish($FINISH_FUNCTION);//set name of external function to be called on finish upload

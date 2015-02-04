@@ -24,7 +24,7 @@ var MiniUploader = function(dropContainer, opts){
 		async:			true,
 		
 		// Server side uploader URL
-		urlUpload: 		'',
+		urlUpload: 		'upload.php',
 		
 		// Remote Upload path, better set in the server side
 		uploadPath: '',
@@ -52,7 +52,6 @@ var MiniUploader = function(dropContainer, opts){
 		buttonUpload:	'<a class="mu-bstart" title="Start upload this file"><i class="fa fa-arrow-circle-up"></i></a>',
 		buttonSelect:	'<a class="mu-bselect">Select file</a>',
 		filenameContainer:	'<span class="mu-fname"></span>',
-		fileCountContainer: '<span class="mu-fcount"></span>',
 		//Progress set up
 		progressBar: 	{
 			//this is the html to show as progress information
@@ -182,7 +181,7 @@ MiniUploader.prototype = {
 		this.addOverLayers();
 		
 		//add hidden input for select button
-		this.inputSelect = $('<input type="file" />').css({visibility:'hidden', width:0, height:0, position:absolute, top:0, left:0});
+		this.inputSelect = $('<input type="file" />').css({visibility:'hidden', width:0, height:0, position:'absolute', top:0, left:0});
 		this.inputSelect.appendTo('body');
 		return true;
 	},
@@ -415,7 +414,7 @@ MiniUploader.prototype = {
 		};
 		
 		//the single dom elmenet attach 
-		domElem.data('fileIds', fileId);
+		domElem.data('fileId', fileId);
 		
 		//add in list the file
 		this.fileList[fileId] = fileElem;
@@ -423,11 +422,6 @@ MiniUploader.prototype = {
 		//add buttons for the single element, including progress bar
 		if(this.opts.addButtons) {
 			this.addButtons(domElem, fileElem.name);
-		}
-		
-		//update file counter number
-		if( domElem.data('fileCounter') ) {
-			domElem.data('fileCounter').html(fileIds.length);
 		}
 		
 		//create a simple preview of the file
@@ -469,28 +463,19 @@ MiniUploader.prototype = {
 	//Clean the DOM container of the file
 	removeFilesFromDom: function(domElem) {
 		//get all files in this single container and remove one by one
-		var fileIds = domElem.data('fileIds');
-		var len 	= fileIds.length;
-		for(var i = 0; i<len; i++) {
-			var fileId = fileIds[i];
-			this.removeFile(fileId);
-		}
+		var fileId = domElem.data('fileId');
+		this.removeFile(fileId);
 		
 		//clean doom element
 		domElem.find('.mu-buttons').remove();
 		domElem.data('hasButtons', false);
-		domElem.data('fileIds', []);
+		domElem.data('fileId', null);
 		//remove the preview image and restore old content
 		var holder 	= domElem.find(this.opts.previewHolder);
 		if( holder.length ) {
 			holder.html('');
 		}
-		
-		//remove file counter
-		if( domElem.data('fileCounter') ){
-			domElem.data('fileCounter').remove();
-		}
-		
+
 		//remove progress bar
 		if( domElem.data('progressBar') ) {
 			domElem.data('progressBar').remove();
@@ -513,14 +498,8 @@ MiniUploader.prototype = {
 		    		
 		    		//get file list for this dom element
 					var domElem = e.data.domElem;
-					var fileIds = domElem.data('fileIds');
-					var len 	= fileIds.length;
-					
-					//upload files
-					for(var i = 0; i<len; i++) {
-						var fileId = fileIds[i];
-						e.data.self.startUpload(fileId);//FIXME qui rischia di non rispettare le quote
-					}
+					var fileId 	= domElem.data('fileId');
+					e.data.self.enqueueFile(fileId);
 				});
 			}
 			
@@ -538,30 +517,16 @@ MiniUploader.prototype = {
 				var progressBar = $(this.opts.progressBar.container).appendTo(domElem);
 				domElem.data('progressBar', progressBar); 
 			}
-
-			//file counter
-			if(this.opts.fileCountContainer) {
-				var fileCounter = $(this.opts.fileCountContainer).appendTo(domElem);
-				domElem.data('fileCounter', fileCounter.html(1) );
-//				fileCounter.on('click', domElem, function(e){
-//					
-//				});
-			}
 			
 			//show file name
 			if(this.opts.filenameContainer) {
 				var filenameContainer = $(this.opts.filenameContainer).appendTo(domElem);
+				filenameContainer.attr('title', fileName );
 				domElem.data('filenameContainer', filenameContainer.html(fileName) );
 			}
 			domElem.data('hasButtons', true);
 			
 			//TODO add browse
-		}
-		
-		//update the title attribute for other file names
-		if( domElem.data('filenameContainer') ) {
-			var fileId = domElem.data('fileId');
-			domElem.data('filenameContainer').attr('title', this.fileList[fileId].name );
 		}
 	},
 
